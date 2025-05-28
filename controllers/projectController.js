@@ -1,6 +1,7 @@
 
 const Project = require('../models/Project');
 const { successResponse, errorResponse } = require('../utils/apiResponse');
+const mongoose = require('mongoose'); // ✅ PHẢI CÓ DÒNG NÀY
 const fs = require('fs-extra');
 const path = require('path');
 

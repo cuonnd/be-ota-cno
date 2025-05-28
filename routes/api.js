@@ -1,5 +1,6 @@
 
 const express = require('express');
+const mongoose = require('mongoose'); // ✅ PHẢI CÓ DÒNG NÀY
 const router = express.Router();
 const projectController = require('../controllers/projectController');
 const versionController = require('../controllers/versionController');
