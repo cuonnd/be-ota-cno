@@ -19,7 +19,9 @@ mongoose.connect(process.env.MONGODB_URI, {
   .catch(err => console.error('❌ MongoDB Connection Error:', err));
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: '*', // Cho phép tất cả các nguồn gốc
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -27,7 +29,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/files', express.static(path.join(__dirname, 'uploads')));
 
 // API routes
-app.use('/api', apiRoutes); // ⬅️ Đây là nơi bạn mount toàn bộ API từ routes/api.js
+app.use('/api', apiRoutes);
 
 // Error handlers
 app.use(routeNotFoundHandler);
