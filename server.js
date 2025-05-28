@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const dotenv = require('dotenv');
-const mongoose = require('mongoose');
+const connectDB = require('./config/db'); // Sử dụng function từ db.js
 
 const apiRoutes = require('./routes/api');
 const { generalErrorHandler, routeNotFoundHandler } = require('./middleware/errorHandler');
@@ -11,17 +11,9 @@ dotenv.config();
 
 const app = express();
 
-// MongoDB connection
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  serverSelectionTimeoutMS: 30000,
-}).then(() => console.log('✅ MongoDB Connected'))
-  .catch(err => console.error('❌ MongoDB Connection Error:', err));
-
 // Middleware
 app.use(cors({
-  origin: '*', // Cho phép tất cả các nguồn gốc
+  origin: '*',
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -36,8 +28,21 @@ app.use('/api', apiRoutes);
 app.use(routeNotFoundHandler);
 app.use(generalErrorHandler);
 
-// Start server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server is running on port ${PORT}`);
-});
+// Khởi động server chỉ sau khi MongoDB đã kết nối thành công
+const startServer = async () => {
+  try {
+    // Đợi MongoDB kết nối trước
+    await connectDB();
+    
+    // Sau đó mới khởi động server
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+      console.log(`🚀 Server is running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer();

@@ -24,9 +24,12 @@ exports.createProject = async (req, res) => {
 // Get all projects
 exports.getAllProjects = async (req, res) => {
   console.log('Fetching all projects');
+  console.log('MongoDB connection state:', mongoose.connection.readyState);
+  
   try {
     const projects = await Project.find().sort({ createdAt: -1 });
-    // Sort versions within each project manually if needed, though pre-save hook should handle it.
+    console.log(`Found ${projects.length} projects`);
+    
     projects.forEach(project => {
         if (project.versions && project.versions.length > 0) {
             project.versions.sort((a,b) => new Date(b.uploadDate) - new Date(a.uploadDate));

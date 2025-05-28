@@ -38,5 +38,21 @@ router.get('/projects/:projectId/bundles/latest', bundleUpdateController.getLate
 // Delete a specific bundle update
 router.delete('/projects/:projectId/bundles/:bundleUpdateId', bundleUpdateController.deleteBundleUpdate);
 
+router.get('/health', (req, res) => {
+  const dbState = mongoose.connection.readyState;
+  const dbStates = {
+    0: 'disconnected',
+    1: 'connected',
+    2: 'connecting',
+    3: 'disconnecting'
+  };
+  
+  res.json({
+    status: 'OK',
+    database: dbStates[dbState],
+    timestamp: new Date().toISOString()
+  });
+});
+
 
 module.exports = router;
