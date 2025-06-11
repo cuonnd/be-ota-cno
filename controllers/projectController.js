@@ -50,9 +50,36 @@ exports.getProjectById = async (req, res) => {
     if (!project) {
       return errorResponse(res, 404, 'Project not found.');
     }
+    
+    // ✅ Debug logs
+    console.log('=== Project Data Debug ===');
+    console.log('Project ID:', req.params.projectId);
+    console.log('Total bundleUpdates:', project.bundleUpdates?.length || 0);
+    
+    if (project.bundleUpdates && project.bundleUpdates.length > 0) {
+        console.log('Bundle updates before sort:');
+        project.bundleUpdates.forEach((bundle, index) => {
+            console.log(`  ${index}: ${bundle.platform} v${bundle.bundleVersion} (${bundle.createdAt})`);
+        });
+        
+        // Sort bundleUpdates
+        project.bundleUpdates.sort((a, b) => {
+            const versionCompare = semver.rcompare(a.bundleVersion, b.bundleVersion);
+            if (versionCompare !== 0) return versionCompare;
+            return new Date(b.createdAt) - new Date(a.createdAt);
+        });
+        
+        console.log('Bundle updates after sort:');
+        project.bundleUpdates.forEach((bundle, index) => {
+            console.log(`  ${index}: ${bundle.platform} v${bundle.bundleVersion} (${bundle.createdAt})`);
+        });
+    }
+    
+    // Sort versions (APK/IPA)
     if (project.versions && project.versions.length > 0) {
         project.versions.sort((a,b) => new Date(b.uploadDate) - new Date(a.uploadDate));
     }
+    
     return successResponse(res, 200, project);
   } catch (error) {
     console.error('Error fetching project by ID:', error);
