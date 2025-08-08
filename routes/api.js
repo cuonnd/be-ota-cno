@@ -5,8 +5,8 @@ const router = express.Router();
 const projectController = require('../controllers/projectController');
 const versionController = require('../controllers/versionController');
 const bundleUpdateController = require('../controllers/bundleUpdateController');
-const upload = require('../middleware/uploadMiddleware'); // For APK/IPA
-const bundleUpload = require('../middleware/uploadMiddleware'); // Can reuse or create specific for bundles
+// const upload = require('../middleware/uploadMiddleware'); // For APK/IPA
+const { upload } = require("../middleware/uploadMiddleware"); // nếu export thêm
 
 // === Project Routes ===
 router.post('/projects', projectController.createProject);
@@ -28,7 +28,7 @@ router.put('/projects/:projectId/versions/:versionId/environments', versionContr
 // === React Native Bundle Update Routes (CodePush-like) ===
 router.post(
   '/projects/:projectId/bundles',
-  bundleUpload.single('bundleFile'), // 'bundleFile' for RN bundles
+  upload.single('bundleFile'), // 'bundleFile' for RN bundles
   bundleUpdateController.uploadBundleUpdate
 );
 

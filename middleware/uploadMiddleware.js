@@ -1,39 +1,57 @@
+const multer = require("multer");
+const { S3Client } = require("@aws-sdk/client-s3");
+const { Upload } = require("@aws-sdk/lib-storage");
+const path = require("path");
+require("dotenv").config();
 
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs-extra');
-
-const storage = multer.diskStorage({
-  destination: async (req, file, cb) => {
-    const tempUploadsPath = path.join(__dirname, '../uploads_temp');
-    await fs.ensureDir(tempUploadsPath);
-    cb(null, tempUploadsPath);
+// S3Client cho DigitalOcean Spaces
+const s3Client = new S3Client({
+  endpoint: `https://${process.env.DO_SPACES_ENDPOINT}`,
+  region: "sfo3",
+  credentials: {
+    accessKeyId: process.env.DO_SPACES_KEY,
+    secretAccessKey: process.env.DO_SPACES_SECRET,
   },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + '-' + Buffer.from(file.originalname, 'latin1').toString('utf8')); // Handle special characters in filename
-  }
+  forcePathStyle: false,
 });
 
-// File filter to accept APK, IPA, ZIP, and JSBUNDLE files
-const fileFilter = (req, file, cb) => {
-  const allowedExtensions = ['.apk', '.ipa', '.zip', '.jsbundle'];
-  // Check fieldname to apply different rules if needed in future, e.g. different mimetypes for different fields
-  // const fieldName = file.fieldname; 
-
-  const extname = path.extname(file.originalname).toLowerCase();
-  if (allowedExtensions.includes(extname)) {
-    cb(null, true);
-  } else {
-    cb(new Error(`Invalid file type. Only ${allowedExtensions.join(', ')} files are allowed. Detected: ${extname}`), false);
-  }
-};
-
+// Multer lưu file vào RAM
 const upload = multer({
-  storage: storage,
-  fileFilter: fileFilter,
-  limits: {
-    fileSize: 1024 * 1024 * 500 // 500 MB limit
-  }
+  storage: multer.memoryStorage(),
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const allowed = [".apk", ".ipa", ".zip", ".jsbundle", ".bundle"];
+    allowed.includes(ext)
+      ? cb(null, true)
+      : cb(new Error(`Invalid file type: ${ext}`), false);
+  },
+  limits: { fileSize: 1024 * 1024 * 500 }, // 500MB
 });
 
-module.exports = upload;
+// Hàm upload file lên DO Spaces
+async function uploadToSpaces(file, projectId) {
+  const safeName = path.basename(
+    Buffer.from(file.originalname, "latin1").toString("utf8")
+  ).replace(/[^\w\-\.]/g, "_");
+
+  const key = `ota-cno/${projectId || "general"}/${Date.now()}-${safeName}`;
+  console.log(3333, key);
+  
+  const parallelUpload = new Upload({
+    client: s3Client,
+    params: {
+      Bucket: process.env.DO_SPACES_BUCKET,
+      Key: key,
+      Body: file.buffer,
+      ACL: "public-read",
+      ContentType: file.mimetype,
+    },
+  });
+
+  await parallelUpload.done();
+
+  const url = `https://${process.env.DO_SPACES_BUCKET}.${process.env.DO_SPACES_ENDPOINT}/${key}`;
+  return { key, url };
+}
+
+module.exports = { upload, uploadToSpaces };

@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs-extra');
 const semver = require('semver'); // For semantic version comparison
 const mongoose = require('mongoose');
+const { uploadToSpaces } = require("../middleware/uploadMiddleware"); // nếu export thêm
 
 // Upload a new React Native bundle update
 exports.uploadBundleUpdate = async (req, res) => {
@@ -19,13 +20,11 @@ exports.uploadBundleUpdate = async (req, res) => {
       return errorResponse(res, 400, 'Platform, bundle version, and bundle hash are required.');
     }
     if (!semver.valid(bundleVersion)) {
-        await fs.unlink(req.file.path); // Clean up temp file
-        return errorResponse(res, 400, `Invalid bundle version format: ${bundleVersion}. Please use semantic versioning (e.g., 1.0.0).`);
+      return errorResponse(res, 400, `Invalid bundle version format: ${bundleVersion}. Please use semantic versioning (e.g., 1.0.0).`);
     }
 
     const project = await Project.findById(projectId);
     if (!project) {
-      await fs.unlink(req.file.path);
       return errorResponse(res, 404, 'Project not found.');
     }
 
@@ -34,24 +33,17 @@ exports.uploadBundleUpdate = async (req, res) => {
     //   await fs.unlink(req.file.path);
     //   return errorResponse(res, 400, `Project does not support React Native platform: ${platform}`);
     // }
-    
+
     // Check for existing bundle with the same version and platform
     const existingBundle = project.bundleUpdates.find(
       b => b.platform === platform && b.bundleVersion === bundleVersion
     );
     if (existingBundle) {
-      await fs.unlink(req.file.path); // Clean up temp file
       return errorResponse(res, 409, `Bundle version ${bundleVersion} for platform ${platform} already exists for this project.`);
     }
+    const { url } = await uploadToSpaces(req.file, projectId);
 
     const bundleUpdateId = new mongoose.Types.ObjectId();
-    const relativeFilePath = path.join(projectId, 'bundles', bundleUpdateId.toString(), req.file.originalname);
-    const absoluteFilePath = path.join(__dirname, '../uploads', relativeFilePath);
-
-    await fs.ensureDir(path.dirname(absoluteFilePath));
-    await fs.move(req.file.path, absoluteFilePath, { overwrite: true });
-
-    const bundleUrl = `${process.env.BASE_URL}/files/${relativeFilePath.replace(/\\/g, '/')}`; // Ensure forward slashes for URL
 
     const newBundleUpdate = {
       _id: bundleUpdateId,
@@ -60,15 +52,15 @@ exports.uploadBundleUpdate = async (req, res) => {
       bundleHash,
       fileName: req.file.originalname,
       fileSize: (req.file.size / (1024 * 1024)).toFixed(2) + ' MB',
-      filePath: relativeFilePath,
+      filePath: url,
       description: description || '',
       isMandatory: isMandatory === 'true' || isMandatory === true,
       createdAt: new Date(),
-      bundleUrl,
+      bundleUrl: url,
     };
 
     project.bundleUpdates.unshift(newBundleUpdate);
-    project.bundleUpdates.sort((a,b) => semver.rcompare(a.bundleVersion, b.bundleVersion) || (new Date(b.createdAt) - new Date(a.createdAt)));
+    project.bundleUpdates.sort((a, b) => semver.rcompare(a.bundleVersion, b.bundleVersion) || (new Date(b.createdAt) - new Date(a.createdAt)));
 
 
     await project.save();
@@ -99,7 +91,7 @@ exports.getLatestBundleInfo = async (req, res) => {
       return errorResponse(res, 400, 'Platform and current client bundle version are required query parameters.');
     }
     if (!semver.valid(currentClientBundleVersion)) {
-        return errorResponse(res, 400, `Invalid current client bundle version format: ${currentClientBundleVersion}.`);
+      return errorResponse(res, 400, `Invalid current client bundle version format: ${currentClientBundleVersion}.`);
     }
 
     const project = await Project.findById(projectId);
@@ -111,7 +103,7 @@ exports.getLatestBundleInfo = async (req, res) => {
       .filter(b => b.platform === platform.toLowerCase())
       .sort((a, b) => semver.rcompare(a.bundleVersion, b.bundleVersion) || (new Date(b.createdAt) - new Date(a.createdAt))); // Sort by version (desc), then date (desc)
 
-    const latestSuitableBundle = relevantBundles.find(b => 
+    const latestSuitableBundle = relevantBundles.find(b =>
       semver.valid(b.bundleVersion) && semver.gt(b.bundleVersion, currentClientBundleVersion)
     );
 
@@ -133,7 +125,7 @@ exports.getLatestBundleInfo = async (req, res) => {
   } catch (error) {
     console.error('Error fetching latest bundle info:', error);
     if (error.kind === 'ObjectId') {
-        return errorResponse(res, 400, 'Invalid project ID format.');
+      return errorResponse(res, 400, 'Invalid project ID format.');
     }
     return errorResponse(res, 500, 'Server error while fetching latest bundle info.', error.message);
   }
@@ -160,7 +152,7 @@ exports.deleteBundleUpdate = async (req, res) => {
     if (await fs.pathExists(filePathToDelete)) {
       // Delete the specific bundle file and its parent directory if empty, or just the file.
       // For simplicity, deleting the bundle's directory (e.g., uploads/projectId/bundles/bundleUpdateId/)
-      await fs.remove(path.dirname(filePathToDelete)); 
+      await fs.remove(path.dirname(filePathToDelete));
       console.log(`Deleted bundle directory: ${path.dirname(filePathToDelete)}`);
     } else {
       console.warn(`Bundle file not found for deletion: ${filePathToDelete}`);
@@ -173,7 +165,7 @@ exports.deleteBundleUpdate = async (req, res) => {
   } catch (error) {
     console.error('Error deleting bundle update:', error);
     if (error.kind === 'ObjectId') {
-        return errorResponse(res, 400, 'Invalid project or bundle ID format.');
+      return errorResponse(res, 400, 'Invalid project or bundle ID format.');
     }
     return errorResponse(res, 500, 'Server error while deleting bundle update.', error.message);
   }
