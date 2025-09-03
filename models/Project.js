@@ -1,7 +1,6 @@
-
-const mongoose = require('mongoose');
-const AppVersionSchema = require('./AppVersion'); // For APK/IPA versions
-const BundleUpdateSchema = require('./BundleUpdate'); // For React Native bundle updates
+const mongoose = require("mongoose");
+const AppVersionSchema = require("./AppVersion"); // For APK/IPA versions
+const BundleUpdateSchema = require("./BundleUpdate"); // For React Native bundle updates
 
 const ProjectSchema = new mongoose.Schema({
   name: {
@@ -15,13 +14,16 @@ const ProjectSchema = new mongoose.Schema({
   },
   platforms: {
     type: [String],
-    enum: ['ios', 'android',], // Add valid values here
-    required: true
+    enum: ["iOS", "Android", "ios", "android"], // Accept both formats
+    required: true,
   },
-  rnPlatforms: [{ // Platforms specifically for React Native bundle updates
-    type: String,
-    enum: ['android', 'ios'], // Lowercase to match common RN usage
-  }],
+  rnPlatforms: [
+    {
+      // Platforms specifically for React Native bundle updates
+      type: String,
+      enum: ["iOS", "Android", "ios", "android"], // Accept both formats
+    },
+  ],
   createdAt: {
     type: Date,
     default: Date.now,
@@ -31,15 +33,18 @@ const ProjectSchema = new mongoose.Schema({
 });
 
 // Pre-save middleware to sort versions and bundleUpdates by date descending
-ProjectSchema.pre('save', function(next) {
-  if (this.isModified('versions')) {
-    this.versions.sort((a, b) => new Date(b.uploadDate) - new Date(a.uploadDate));
+ProjectSchema.pre("save", function (next) {
+  if (this.isModified("versions")) {
+    this.versions.sort(
+      (a, b) => new Date(b.uploadDate) - new Date(a.uploadDate)
+    );
   }
-  if (this.isModified('bundleUpdates')) {
-    this.bundleUpdates.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  if (this.isModified("bundleUpdates")) {
+    this.bundleUpdates.sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    );
   }
   next();
 });
 
-
-module.exports = mongoose.model('Project', ProjectSchema);
+module.exports = mongoose.model("Project", ProjectSchema);
