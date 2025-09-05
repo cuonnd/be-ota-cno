@@ -1,83 +1,135 @@
+const Project = require("../models/Project");
+const { successResponse, errorResponse } = require("../utils/apiResponse");
+const path = require("path");
+const fs = require("fs-extra");
+const semver = require("semver");
+const mongoose = require("mongoose");
+const { uploadToSpaces } = require("../middleware/uploadMiddleware");
 
-const Project = require('../models/Project');
-const { successResponse, errorResponse } = require('../utils/apiResponse');
-const path = require('path');
-const fs = require('fs-extra');
-const semver = require('semver'); // For semantic version comparison
-const mongoose = require('mongoose');
-const { uploadToSpaces } = require("../middleware/uploadMiddleware"); // nếu export thêm
+// Hàm helper để normalize version
+const normalizeVersion = (version) => {
+  if (!version) return version;
+
+  // Nếu đã là semantic version hợp lệ, giữ nguyên
+  if (semver.valid(version)) return version;
+
+  // Chuyển đổi các format thường gặp
+  const parts = version.split(".");
+
+  if (parts.length === 1) {
+    // "1" -> "1.0.0"
+    return `${parts[0]}.0.0`;
+  } else if (parts.length === 2) {
+    // "1.0" -> "1.0.0"
+    return `${parts[0]}.${parts[1]}.0`;
+  }
+
+  return version; // Giữ nguyên nếu không match pattern nào
+};
 
 // Upload a new React Native bundle update
 exports.uploadBundleUpdate = async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { platform, bundleVersion, bundleHash, description, isMandatory } = req.body;
+    const { platform, bundleVersion, bundleHash, description, isMandatory } =
+      req.body;
 
     if (!req.file) {
-      return errorResponse(res, 400, 'Bundle file (.zip or .jsbundle) is required.');
+      return errorResponse(
+        res,
+        400,
+        "Bundle file (.zip or .jsbundle) is required."
+      );
     }
     if (!platform || !bundleVersion || !bundleHash) {
-      return errorResponse(res, 400, 'Platform, bundle version, and bundle hash are required.');
+      return errorResponse(
+        res,
+        400,
+        "Platform, bundle version, and bundle hash are required."
+      );
     }
-    if (!semver.valid(bundleVersion)) {
-      return errorResponse(res, 400, `Invalid bundle version format: ${bundleVersion}. Please use semantic versioning (e.g., 1.0.0).`);
+
+    // ✅ Normalize version trước khi validate
+    const normalizedVersion = normalizeVersion(bundleVersion);
+
+    if (!semver.valid(normalizedVersion)) {
+      return errorResponse(
+        res,
+        400,
+        `Invalid bundle version format: ${bundleVersion}. Please use semantic versioning (e.g., 1.0.0, 1.0, or 1).`
+      );
     }
 
     const project = await Project.findById(projectId);
     if (!project) {
-      return errorResponse(res, 404, 'Project not found.');
+      return errorResponse(res, 404, "Project not found.");
     }
 
-    // Check if project supports this RN platform (optional, depends on how you manage rnPlatforms in Project model)
-    // if (!project.rnPlatforms || !project.rnPlatforms.includes(platform.toLowerCase())) {
-    //   await fs.unlink(req.file.path);
-    //   return errorResponse(res, 400, `Project does not support React Native platform: ${platform}`);
-    // }
-
-    // Check for existing bundle with the same version and platform
+    // Check for existing bundle with the same version and platform (dùng normalized version)
     const existingBundle = project.bundleUpdates.find(
-      b => b.platform === platform && b.bundleVersion === bundleVersion
+      (b) => b.platform === platform && b.bundleVersion === normalizedVersion
     );
     if (existingBundle) {
-      return errorResponse(res, 409, `Bundle version ${bundleVersion} for platform ${platform} already exists for this project.`);
+      return errorResponse(
+        res,
+        409,
+        `Bundle version ${normalizedVersion} for platform ${platform} already exists for this project.`
+      );
     }
-    const { url } = await uploadToSpaces(req.file, projectId);
 
+    const { url } = await uploadToSpaces(req.file, projectId);
     const bundleUpdateId = new mongoose.Types.ObjectId();
 
     const newBundleUpdate = {
       _id: bundleUpdateId,
-      platform: platform.toLowerCase(), // Store consistently
-      bundleVersion,
+      platform: platform.toLowerCase(),
+      bundleVersion: normalizedVersion, // ✅ Lưu normalized version
       bundleHash,
       fileName: req.file.originalname,
-      fileSize: (req.file.size / (1024 * 1024)).toFixed(2) + ' MB',
+      fileSize: (req.file.size / (1024 * 1024)).toFixed(2) + " MB",
       filePath: url,
-      description: description || '',
-      isMandatory: isMandatory === 'true' || isMandatory === true,
+      description: description || "",
+      isMandatory: isMandatory === "true" || isMandatory === true,
       createdAt: new Date(),
       bundleUrl: url,
     };
 
     project.bundleUpdates.unshift(newBundleUpdate);
-    project.bundleUpdates.sort((a, b) => semver.rcompare(a.bundleVersion, b.bundleVersion) || (new Date(b.createdAt) - new Date(a.createdAt)));
-
+    project.bundleUpdates.sort(
+      (a, b) =>
+        semver.rcompare(a.bundleVersion, b.bundleVersion) ||
+        new Date(b.createdAt) - new Date(a.createdAt)
+    );
 
     await project.save();
-    const savedBundle = project.bundleUpdates.find(b => b._id.equals(bundleUpdateId));
+    const savedBundle = project.bundleUpdates.find((b) =>
+      b._id.equals(bundleUpdateId)
+    );
 
-    return successResponse(res, 201, savedBundle, 'React Native bundle update uploaded successfully.');
-
+    return successResponse(
+      res,
+      201,
+      savedBundle,
+      "React Native bundle update uploaded successfully."
+    );
   } catch (error) {
-    console.error('Error uploading RN bundle update:', error);
+    console.error("Error uploading RN bundle update:", error);
     if (req.file && req.file.path) {
       try {
         if (await fs.pathExists(req.file.path)) await fs.unlink(req.file.path);
       } catch (cleanupError) {
-        console.error("Error cleaning up bundle file during error handling:", cleanupError);
+        console.error(
+          "Error cleaning up bundle file during error handling:",
+          cleanupError
+        );
       }
     }
-    return errorResponse(res, 500, 'Server error while uploading RN bundle update.', error.message);
+    return errorResponse(
+      res,
+      500,
+      "Server error while uploading RN bundle update.",
+      error.message
+    );
   }
 };
 
@@ -88,23 +140,43 @@ exports.getLatestBundleInfo = async (req, res) => {
     const { platform, currentClientBundleVersion } = req.query;
 
     if (!platform || !currentClientBundleVersion) {
-      return errorResponse(res, 400, 'Platform and current client bundle version are required query parameters.');
+      return errorResponse(
+        res,
+        400,
+        "Platform and current client bundle version are required query parameters."
+      );
     }
-    if (!semver.valid(currentClientBundleVersion)) {
-      return errorResponse(res, 400, `Invalid current client bundle version format: ${currentClientBundleVersion}.`);
+
+    // ✅ Normalize version từ client
+    const normalizedClientVersion = normalizeVersion(
+      currentClientBundleVersion
+    );
+
+    if (!semver.valid(normalizedClientVersion)) {
+      return errorResponse(
+        res,
+        400,
+        `Invalid current client bundle version format: ${currentClientBundleVersion}. Supported formats: 1.0.0, 1.0, or 1`
+      );
     }
 
     const project = await Project.findById(projectId);
     if (!project) {
-      return errorResponse(res, 404, 'Project not found.');
+      return errorResponse(res, 404, "Project not found.");
     }
 
     const relevantBundles = project.bundleUpdates
-      .filter(b => b.platform === platform.toLowerCase())
-      .sort((a, b) => semver.rcompare(a.bundleVersion, b.bundleVersion) || (new Date(b.createdAt) - new Date(a.createdAt))); // Sort by version (desc), then date (desc)
+      .filter((b) => b.platform === platform.toLowerCase())
+      .sort(
+        (a, b) =>
+          semver.rcompare(a.bundleVersion, b.bundleVersion) ||
+          new Date(b.createdAt) - new Date(a.createdAt)
+      );
 
-    const latestSuitableBundle = relevantBundles.find(b =>
-      semver.valid(b.bundleVersion) && semver.gt(b.bundleVersion, currentClientBundleVersion)
+    const latestSuitableBundle = relevantBundles.find(
+      (b) =>
+        semver.valid(b.bundleVersion) &&
+        semver.gt(b.bundleVersion, normalizedClientVersion)
     );
 
     if (latestSuitableBundle) {
@@ -115,19 +187,23 @@ exports.getLatestBundleInfo = async (req, res) => {
         createdAt: latestSuitableBundle.createdAt,
         description: latestSuitableBundle.description,
         isMandatory: latestSuitableBundle.isMandatory,
-        fileName: latestSuitableBundle.fileName, // Optional, but good for client
-        fileSize: latestSuitableBundle.fileSize, // Optional
+        fileName: latestSuitableBundle.fileName,
+        fileSize: latestSuitableBundle.fileSize,
       });
     } else {
-      // No newer version found
-      return successResponse(res, 204, null, 'No new bundle update available.');
+      return successResponse(res, 204, null, "No new bundle update available.");
     }
   } catch (error) {
-    console.error('Error fetching latest bundle info:', error);
-    if (error.kind === 'ObjectId') {
-      return errorResponse(res, 400, 'Invalid project ID format.');
+    console.error("Error fetching latest bundle info:", error);
+    if (error.kind === "ObjectId") {
+      return errorResponse(res, 400, "Invalid project ID format.");
     }
-    return errorResponse(res, 500, 'Server error while fetching latest bundle info.', error.message);
+    return errorResponse(
+      res,
+      500,
+      "Server error while fetching latest bundle info.",
+      error.message
+    );
   }
 };
 
@@ -138,22 +214,34 @@ exports.deleteBundleUpdate = async (req, res) => {
     const project = await Project.findById(projectId);
 
     if (!project) {
-      return errorResponse(res, 404, 'Project not found.');
+      return errorResponse(res, 404, "Project not found.");
     }
 
-    const bundleIndex = project.bundleUpdates.findIndex(b => b._id.toString() === bundleUpdateId);
+    const bundleIndex = project.bundleUpdates.findIndex(
+      (b) => b._id.toString() === bundleUpdateId
+    );
     if (bundleIndex === -1) {
-      return errorResponse(res, 404, 'Bundle update not found in this project.');
+      return errorResponse(
+        res,
+        404,
+        "Bundle update not found in this project."
+      );
     }
 
     const bundleToDelete = project.bundleUpdates[bundleIndex];
-    const filePathToDelete = path.join(__dirname, '../uploads', bundleToDelete.filePath);
+    const filePathToDelete = path.join(
+      __dirname,
+      "../uploads",
+      bundleToDelete.filePath
+    );
 
     if (await fs.pathExists(filePathToDelete)) {
       // Delete the specific bundle file and its parent directory if empty, or just the file.
       // For simplicity, deleting the bundle's directory (e.g., uploads/projectId/bundles/bundleUpdateId/)
       await fs.remove(path.dirname(filePathToDelete));
-      console.log(`Deleted bundle directory: ${path.dirname(filePathToDelete)}`);
+      console.log(
+        `Deleted bundle directory: ${path.dirname(filePathToDelete)}`
+      );
     } else {
       console.warn(`Bundle file not found for deletion: ${filePathToDelete}`);
     }
@@ -161,12 +249,22 @@ exports.deleteBundleUpdate = async (req, res) => {
     project.bundleUpdates.splice(bundleIndex, 1);
     await project.save();
 
-    return successResponse(res, 200, null, 'Bundle update deleted successfully.');
+    return successResponse(
+      res,
+      200,
+      null,
+      "Bundle update deleted successfully."
+    );
   } catch (error) {
-    console.error('Error deleting bundle update:', error);
-    if (error.kind === 'ObjectId') {
-      return errorResponse(res, 400, 'Invalid project or bundle ID format.');
+    console.error("Error deleting bundle update:", error);
+    if (error.kind === "ObjectId") {
+      return errorResponse(res, 400, "Invalid project or bundle ID format.");
     }
-    return errorResponse(res, 500, 'Server error while deleting bundle update.', error.message);
+    return errorResponse(
+      res,
+      500,
+      "Server error while deleting bundle update.",
+      error.message
+    );
   }
 };
