@@ -89,11 +89,22 @@ exports.uploadBundleUpdate = async (req, res) => {
     }
 
     // Check if project supports this platform
-    if (!project.rnPlatforms || !project.rnPlatforms.includes(platform.toLowerCase())) {
+    const normalizedPlatform = platform.toLowerCase();
+    const supportedPlatforms = project.rnPlatforms?.map(p => p.toLowerCase()) || [];
+    
+    if (!project.rnPlatforms || project.rnPlatforms.length === 0) {
       return errorResponse(
         res,
         400,
-        `Project does not support platform: ${platform}. Supported platforms: ${project.rnPlatforms?.join(', ') || 'none'}`
+        `Project does not have React Native platforms configured. Please add platforms to the project first.`
+      );
+    }
+    
+    if (!supportedPlatforms.includes(normalizedPlatform)) {
+      return errorResponse(
+        res,
+        400,
+        `Project does not support platform: ${platform}. Supported platforms: ${project.rnPlatforms.join(', ')}`
       );
     }
 

@@ -115,6 +115,45 @@ exports.updateProjectDetails = async (req, res) => {
   }
 };
 
+// Update React Native platforms for a project
+exports.updateRNPlatforms = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { rnPlatforms } = req.body;
+
+    if (!rnPlatforms || !Array.isArray(rnPlatforms) || rnPlatforms.length === 0) {
+      return errorResponse(res, 400, 'rnPlatforms array is required and must not be empty.');
+    }
+
+    // Validate platform values
+    const validPlatforms = ['ios', 'android', 'iOS', 'Android'];
+    const invalidPlatforms = rnPlatforms.filter(p => !validPlatforms.includes(p));
+    if (invalidPlatforms.length > 0) {
+      return errorResponse(res, 400, `Invalid platforms: ${invalidPlatforms.join(', ')}. Valid platforms: ${validPlatforms.join(', ')}`);
+    }
+
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return errorResponse(res, 404, 'Project not found.');
+    }
+
+    project.rnPlatforms = rnPlatforms;
+    await project.save();
+
+    return successResponse(res, 200, {
+      projectId: project._id,
+      name: project.name,
+      rnPlatforms: project.rnPlatforms
+    }, 'React Native platforms updated successfully.');
+  } catch (error) {
+    console.error('Error updating RN platforms:', error);
+    if (error.kind === 'ObjectId') {
+      return errorResponse(res, 400, 'Invalid project ID format.');
+    }
+    return errorResponse(res, 500, 'Server error while updating RN platforms.', error.message);
+  }
+};
+
 // Delete a project
 exports.deleteProject = async (req, res) => {
   try {

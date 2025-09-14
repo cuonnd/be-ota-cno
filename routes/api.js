@@ -13,6 +13,7 @@ router.post('/projects', projectController.createProject);
 router.get('/projects', projectController.getAllProjects);
 router.get('/projects/:projectId', projectController.getProjectById);
 router.put('/projects/:projectId', projectController.updateProjectDetails); // For name, description, platforms
+router.put('/projects/:projectId/rn-platforms', projectController.updateRNPlatforms); // For React Native platforms
 router.delete('/projects/:projectId', projectController.deleteProject);
 
 // === App Version Routes (APK/IPA) ===
