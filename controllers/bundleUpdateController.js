@@ -90,13 +90,13 @@ exports.uploadBundleUpdate = async (req, res) => {
 
     // Check if project supports this platform
     const normalizedPlatform = platform.toLowerCase();
-    const supportedPlatforms = project.rnPlatforms?.map(p => p.toLowerCase()) || [];
+    const supportedPlatforms = project.platforms?.map(p => p.toLowerCase()) || [];
     
-    if (!project.rnPlatforms || project.rnPlatforms.length === 0) {
+    if (!project.platforms || project.platforms.length === 0) {
       return errorResponse(
         res,
         400,
-        `Project does not have React Native platforms configured. Please add platforms to the project first.`
+        `Project does not have platforms configured. Please add platforms to the project first.`
       );
     }
     
@@ -104,7 +104,7 @@ exports.uploadBundleUpdate = async (req, res) => {
       return errorResponse(
         res,
         400,
-        `Project does not support platform: ${platform}. Supported platforms: ${project.rnPlatforms.join(', ')}`
+        `Project does not support platform: ${platform}. Supported platforms: ${project.platforms.join(', ')}`
       );
     }
 
